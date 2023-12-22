@@ -65,16 +65,16 @@ fn main() -> Result<()> {
 
     let mut dataframes = Vec::new();
    
-
-    let mut last: Option<DataFrame> = None;
+    // commented out code does a comparision to check for errors, but the schema may be enough.
+    //let mut last: Option<DataFrame> = None;
     for filename in filenames.iter() {
         let next_lf = newest_balance(filename)?;
-        let next_df = next_lf.clone().fetch(1)?;
-        if let Some(last_df) = last { 
-                last_df.frame_equal_schema(&next_df)? 
-        }
+        //let next_df = next_lf.clone().fetch(1)?;
+        //if let Some(last_df) = last { 
+        //        last_df.frame_equal_schema(&next_df)? 
+        //}
         dataframes.push(next_lf);
-        last = Some(next_df);
+        //last = Some(next_df);
     }
 
     let uargs =UnionArgs {
