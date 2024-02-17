@@ -8,6 +8,11 @@ use std::sync::Arc;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
+static ACCOUNT_NAME: &str = "Account Name";
+static AMOUNT: &str = "Amount";
+static DATE: &str = "Date";
+static TOTAL: &str = "Total";
+
 // balances.txt is a list of CSV filenames or paths.
 // each CSV with is expected to have the following header
 //
@@ -38,9 +43,9 @@ fn read_filenames_from_file(filenames_file: &str) -> Vec<PathBuf> {
 
 fn newest_balance(filename: &PathBuf) -> Result<LazyFrame> {
     let fields = vec![
-        ArrowField::new("Date", ArrowDataType::Date32, false),
-        ArrowField::new("Amount", ArrowDataType::Float64, false),
-        ArrowField::new("Account Name", ArrowDataType::Utf8, false),
+        ArrowField::new(DATE, ArrowDataType::Date32, false),
+        ArrowField::new(AMOUNT, ArrowDataType::Float64, false),
+        ArrowField::new(ACCOUNT_NAME, ArrowDataType::Utf8, false),
     ];
 
     let metadata: BTreeMap<String, String> = BTreeMap::new();
@@ -51,7 +56,7 @@ fn newest_balance(filename: &PathBuf) -> Result<LazyFrame> {
         .has_header(true)
         .with_schema(Some(Arc::new(polars_schema)))
         .finish()?;
-    let sorted: LazyFrame = df.sort("Date", SortOptions {
+    let sorted: LazyFrame = df.sort(DATE, SortOptions {
                 descending: false,
                 nulls_last: false,
                 multithreaded: true,
@@ -82,12 +87,29 @@ fn main() -> Result<()> {
     rechunk: true,
     to_supertypes: true } ;
     let combined_df = polars::prelude::concat(&dataframes, uargs)?;
-    let sum = combined_df.with_column(col("Amount").cum_sum(false).alias("Total"));
-
+    let ldf = combined_df.with_column(col(AMOUNT).cum_sum(false).alias(TOTAL));
+    let col_date = col(DATE);
+    let col_amount = col(AMOUNT);
+    let col_account_name = col(ACCOUNT_NAME);
+    let col_total = col(TOTAL);
+    
+    let ldf = ldf.select([
+        col_account_name, 
+        col_amount, 
+        col_date, 
+        col_total]);
     //CsvWriter::new()
     let out_filename = "balances.csv";
     let mut file = File::create(out_filename).expect("could not create file");
-    let mut df = sum.collect()?;
+    let mut df = ldf.collect()?;
+    
+    let columns: &[Series] = df.get_columns();
+
+    assert_eq!(columns[0].name(), ACCOUNT_NAME);
+    assert_eq!(columns[1].name(), AMOUNT);
+    assert_eq!(columns[2].name(), DATE);
+    assert_eq!(columns[3].name(), TOTAL);
+
     CsvWriter::new(&mut file)
         .include_header(true)
         .with_separator(b'\t')
