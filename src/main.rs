@@ -7,6 +7,7 @@ use polars::chunked_array::ops::SortOptions;
 use std::sync::Arc;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
+use std::{ env };
 
 static ACCOUNT_NAME: &str = "Account Name";
 static AMOUNT: &str = "Amount";
@@ -116,6 +117,14 @@ fn main() -> Result<()> {
         .with_float_precision(Some(2))
         .finish(&mut df)?;
     println!("wrote {}", out_filename);
+    configure_the_environment();
+    println!("\n{}", df);
     Ok(())
 }
 
+pub fn configure_the_environment() {
+    env::set_var("POLARS_FMT_TABLE_ROUNDED_CORNERS", "1"); // apply rounded corners to UTF8-styled tables.
+    //env::set_var("POLARS_FMT_MAX_COLS", "20"); // maximum number of columns shown when formatting DataFrames.
+    env::set_var("POLARS_FMT_MAX_ROWS", "999999");   // maximum number of rows shown when formatting DataFrames.
+    env::set_var("POLARS_FMT_STR_LEN", "50");    // maximum number of characters printed per string value.
+}
