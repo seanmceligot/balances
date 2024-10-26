@@ -2,7 +2,6 @@ import pyarrow.parquet as pq
 import pyarrow.feather as feather
 import pyarrow as pa
 import polarsutil as pu
-from datetime import datetime
 from typing import Any, Dict, List, Tuple, Set
 import csv
 import re
@@ -12,7 +11,6 @@ from nltk.stem import PorterStemmer
 import argparse
 import glob
 import os
-import json
 from icecream import ic
 
 # Ensure NLTK resources are downloaded
@@ -127,7 +125,7 @@ def create_transaction_set(
     return transaction_set
 
 # Function to normalize and prepare data for comparison
-def prepare_transactions(transactions: Dict[str, List[Any]], customizations: Dict[str, Any]) -> Dict[str, List[Any]]:
+def prepare_transactions(transactions: Dict[str, List[Any]]) -> Dict[str, List[Any]]:
     check_required_columns(transactions, 'Input File')
     normalize_amounts(transactions, "Amount")
     normalize_descriptions(transactions, "Description")
@@ -153,9 +151,8 @@ def main():
 
     # Read the input file
     input_transactions = read_file(args.in_file)
-    customizations = read_customizations(args.in_file)
     check_required_columns(input_transactions, args.in_file)
-    prepare_transactions(input_transactions, customizations)
+    prepare_transactions(input_transactions)
 
     # Find all comparison files based on the provided pattern
     compare_files = glob.glob(args.compare)
@@ -170,9 +167,8 @@ def main():
     for compare_file in compare_files:
         print(f"Comparing with {compare_file}...")
         compare_transactions_data = read_file(compare_file)
-        compare_customizations = read_customizations(compare_file)
         check_required_columns(compare_transactions_data, compare_file)
-        prepare_transactions(compare_transactions_data, compare_customizations)
+        prepare_transactions(compare_transactions_data)
         match_percentage = compare_transactions(input_transactions, compare_transactions_data)
         print(f"Match percentage with {compare_file}: {match_percentage:.2f}%")
 

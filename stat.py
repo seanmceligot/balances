@@ -1,11 +1,8 @@
-import polars as pl
 import polarsutil as pu
 import argparse
 from icecream import ic
-from pathlib import Path, PurePath
+from pathlib import Path
 from typing import Optional
-import shutil
-from sys import stdout
 
 # Function to handle the main task
 def csv_stat(infile:Path, meta: Optional[Path]):

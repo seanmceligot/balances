@@ -1,10 +1,8 @@
-import polars as pl
 import polarsutil as pu
 import argparse
 from icecream import ic
-from pathlib import Path, PurePath
+from pathlib import Path
 from typing import Optional
-import shutil
 from sys import stdout
 
 # Function to handle the main task
@@ -13,10 +11,6 @@ def csv_stat(infile:Path, meta: Optional[Path]):
  
     df = pu.read_csv(infile, meta)
     ic(df)
-
-    # Get min and max date from the 'Date' column
-    min_date = df['Date'].min().strftime('%Y-%m-%d')
-    max_date = df['Date'].max().strftime('%Y-%m-%d')
 
     df.write_csv(stdout)
 

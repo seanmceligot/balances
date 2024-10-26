@@ -1,4 +1,3 @@
-import polars as pl
 import polarsutil as pu
 import argparse
 from icecream import ic
