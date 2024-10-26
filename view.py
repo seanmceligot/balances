@@ -5,28 +5,33 @@ from pathlib import Path
 from typing import Optional
 from sys import stdout
 
+
 # Function to handle the main task
-def csv_stat(infile:Path, meta: Optional[Path]):
+def csv_stat(infile: Path, meta: Optional[Path]):
     # Read CSV using polars
- 
+
     df = pu.read_csv(infile, meta)
     ic(df)
 
     df.write_csv(stdout)
 
+
 def main():
-    parser = argparse.ArgumentParser(description="Convert CSV to Parquet and ensure 'Date' column is parsed as date.")
-    parser.add_argument('infile', type=str, help='Input CSV file path')
-    parser.add_argument('--meta', type=str, required=False, help='meta file path')
+    parser = argparse.ArgumentParser(
+        description="Convert CSV to Parquet and ensure 'Date' column is parsed as date."
+    )
+    parser.add_argument("infile", type=str, help="Input CSV file path")
+    parser.add_argument("--meta", type=str, required=False, help="meta file path")
 
     args = parser.parse_args()
     meta = Path(args.meta) if args.meta else None
 
     csv_stat(Path(args.infile), meta)
 
+
 def print_to_stdout(s):
     print(s, end="")
 
+
 if __name__ == "__main__":
-    #ic.configureOutput(outputFunction=print_to_stdout)
     main()
