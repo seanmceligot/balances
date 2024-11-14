@@ -1,4 +1,5 @@
 import polarsutil as pu
+import polars as pl
 import argparse
 from icecream import ic
 from pathlib import Path
@@ -7,10 +8,10 @@ from sys import stdout
 
 
 # Function to handle the main task
-def csv_stat(infile: Path, meta: Optional[Path]):
+def csv_view(infile: Path, meta: Optional[Path]):
     # Read CSV using polars
 
-    df = pu.read_csv(infile, meta)
+    df: pl.DataFrame = pu.read_csv(infile, meta)
     ic(df)
 
     df.write_csv(stdout)
@@ -26,7 +27,7 @@ def main():
     args = parser.parse_args()
     meta = Path(args.meta) if args.meta else None
 
-    csv_stat(Path(args.infile), meta)
+    csv_view(Path(args.infile), meta)
 
 
 def print_to_stdout(s):
