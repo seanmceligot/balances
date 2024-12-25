@@ -5,16 +5,21 @@ from icecream import ic
 from pathlib import Path
 from typing import Optional
 from sys import stdout
+from rich.console import Console
+from io import StringIO
 
+console = Console()
 
 # Function to handle the main task
 def csv_view(infile: Path, meta: Optional[Path]):
     # Read CSV using polars
 
     df: pl.DataFrame = pu.read_csv(infile, meta)
-    ic(df)
+    console.print(df)
 
-    df.write_csv(stdout)
+    stream = StringIO()
+    df.write_csv(stream)
+    console.print(stream.getvalue())
 
 
 def main():
