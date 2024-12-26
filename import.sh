@@ -1,6 +1,5 @@
-
 #!/bin/bash
-
+set -x
 infile=/home/sean/drive/files/accounting/atmos/transactions.csv 
 
-python atmos_csv.py --name atmos ${infile}
+python import.py --name atmos ${infile}
