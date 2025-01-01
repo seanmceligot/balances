@@ -8,3 +8,7 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0.75"
 polars = { version = "0.35.4", features = ["csv", "lazy","cum_agg", "polars-io"] }
+
+[[bin]]
+name="balances"
+path="bin/balances.rs"

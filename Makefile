@@ -1,6 +1,6 @@
 run:
 	cargo clippy
-	cargo run
+	cargo run --bin balances
 
 test_import:
 	ruff check import.py
