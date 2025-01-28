@@ -16,10 +16,7 @@ def csv_view(infile: Path, meta: Optional[Path]):
 
     df: pl.DataFrame = pu.read_csv(infile, meta)
     console.print(df)
-
-    stream = StringIO()
-    df.write_csv(stream)
-    console.print(stream.getvalue())
+    pu.print_csv(df)
 
 
 def main():
@@ -31,8 +28,9 @@ def main():
 
     args = parser.parse_args()
     meta = Path(args.meta) if args.meta else None
+    infile = Path(args.infile)
 
-    csv_view(Path(args.infile), meta)
+    csv_view(infile, meta)
 
 
 def print_to_stdout(s):
