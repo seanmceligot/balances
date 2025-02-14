@@ -172,7 +172,7 @@ fn any_to_string(any: AnyValue) -> Option<String> {
             let fstr = format.fmt2(f);
             Some(String::from(fstr))
         },
-        AnyValue::Date(d) => Some(date32_to_date(d).format("yyyy-MM-dd").to_string()),
+        AnyValue::Date(d) => Some(date32_to_date(d).format("%Y-%m-%d").to_string()),
         AnyValue::Null => None,
         _ => None,
     }
