@@ -3,13 +3,10 @@ use anyhow::Result;
 use numfmt::Formatter;
 use numfmt::Precision;
 use polars::chunked_array::ops::SortOptions;
-use polars::frame::row::Row;
 use polars::prelude::*;
-use polars::series::SeriesIter;
 
 use std::collections::BTreeMap;
 use std::env;
-use std::fmt::Debug;
 use std::fs::read_to_string;
 use std::fs::File;
 use std::path::Path;
@@ -17,7 +14,6 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use comfy_table::Table;
 
-use chrono::{Datelike, NaiveDate};
 use polars_arrow::temporal_conversions::date32_to_date;
 
 static ACCOUNT_NAME: &str = "Account Name";
@@ -149,8 +145,7 @@ fn main() -> Result<()> {
     show_subtotals(&ldf2)?;
 
     let df = ldf3.collect()?;
-    let row_wise = (0..df.height())
-    .map(|x| df.get_row(x).unwrap());
+    let row_wise = (0..df.height()).map(|x| df.get_row(x).unwrap());
 
     // print header with column names. cut off each name at 20 characters
     let mut table = Table::new();
@@ -204,7 +199,23 @@ fn show_subtotals(ldf2: &LazyFrame) -> Result<()> {
     let subtotals = g.agg([
         col(AMOUNT).sum()
     ]);
-    println!("\n{}", subtotals.collect()?);
+    let mut df = subtotals.collect()?;
+    //println!("\n{}", df);
+    let row_wise = (0..df.height()).map(|x| df.get_row(x).unwrap());
+
+    // print header with column names. cut off each name at 20 characters
+    let mut table = Table::new();
+    let column_names = columns_names(&df);
+    table.set_header(column_names);
+    for row in row_wise {
+        table.add_row(row.0.into_iter()
+            .map(|any| any_to_string(any))
+            .map(|mb| mb.unwrap_or_default())
+        );
+    }
+    println!("== subtotals ==");
+    println!("{table}");
+    write_csv(&mut df, "subtotals.csv")?;
     Ok(())
 }
 fn write_csv(df: &mut DataFrame, out_filename: &str) -> Result<()> {
