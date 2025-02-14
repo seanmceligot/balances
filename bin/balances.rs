@@ -1,19 +1,30 @@
+use anyhow::Ok;
 use anyhow::Result;
+use numfmt::Formatter;
+use numfmt::Precision;
 use polars::chunked_array::ops::SortOptions;
+use polars::frame::row::Row;
 use polars::prelude::*;
+use polars::series::SeriesIter;
+
 use std::collections::BTreeMap;
 use std::env;
+use std::fmt::Debug;
 use std::fs::read_to_string;
 use std::fs::File;
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
+use comfy_table::Table;
+
+use chrono::{Datelike, NaiveDate};
+use polars_arrow::temporal_conversions::date32_to_date;
 
 static ACCOUNT_NAME: &str = "Account Name";
 static AMOUNT: &str = "Amount";
 static DATE: &str = "Date";
 static TOTAL: &str = "Total";
-
+static ACCOUNT_TYPE: &str = "account_type";
 // balances.txt is a list of CSV filenames or paths.
 // each CSV with is expected to have the following header
 //
@@ -32,14 +43,10 @@ static TOTAL: &str = "Total";
 //
 // Total is cummulative from top to bottom
 //
-fn read_filenames_from_file(filenames_file: &str) -> Vec<PathBuf> {
-    match read_to_string(filenames_file) {
-        Ok(contents) => contents
-            .lines()
-            .map(|line| PathBuf::from(line.trim()))
-            .collect(),
-        Err(error) => panic!("Error reading file: {}", error),
-    }
+fn read_filenames_from_file(filenames_file: &str) -> Result<Vec<PathBuf>> {
+    let text = read_to_string(filenames_file)?;
+    let vec_of_pathbuf = text.lines().map(|line| PathBuf::from(line.trim())).collect();
+    Ok(vec_of_pathbuf)
 }
 
 fn newest_balance(filename: &PathBuf) -> Result<LazyFrame> {
@@ -79,16 +86,18 @@ fn load_categories() -> Result<LazyFrame> {
     let metadata: BTreeMap<String, String> = BTreeMap::new();
     let arrow_schema = ArrowSchema { fields, metadata };
     let polars_schema = Schema::from(Arc::new(arrow_schema));
-    let df = LazyCsvReader::new("categories.csv")
+    let ldf = LazyCsvReader::new("categories.csv")
         .has_header(true)
         .with_schema(Some(Arc::new(polars_schema)))
         .finish()?;
-    Ok(df)
+    Ok(ldf)
 }
+
 fn main() -> Result<()> {
-    let filenames = read_filenames_from_file("balances.txt");
+    configure_the_environment();
 
     let mut dataframes = Vec::new();
+    let filenames = read_filenames_from_file("balances.txt")?;
 
     // commented out code does a comparision to check for errors, but the schema may be enough.
     //let mut last: Option<DataFrame> = None;
@@ -122,7 +131,8 @@ fn main() -> Result<()> {
     let ldf = ldf.left_join(c, col(ACCOUNT_NAME), col(ACCOUNT_NAME));
 
     let out_filename = "balances.csv";
-    let mut file = File::create(out_filename).expect("could not create file");
+    let ldf2 = ldf.clone();
+    let ldf3 = ldf.clone();
     let mut df = ldf.collect()?;
 
     let columns: &[Series] = df.get_columns();
@@ -131,21 +141,80 @@ fn main() -> Result<()> {
     assert_eq!(columns[1].name(), AMOUNT);
     assert_eq!(columns[2].name(), DATE);
     assert_eq!(columns[3].name(), TOTAL);
+    assert_eq!(columns[4].name(), ACCOUNT_TYPE);
 
-    CsvWriter::new(&mut file)
-        .include_header(true)
-        //.with_separator(b'\t')
-        .with_float_precision(Some(2))
-        .finish(&mut df)?;
-    println!("wrote {}", out_filename);
-    configure_the_environment();
-    println!("\n{}", df);
+    write_csv(&mut df, out_filename)?;
+
+    println!("subtotals pre account type");
+    show_subtotals(&ldf2)?;
+
+    let df = ldf3.collect()?;
+    let row_wise = (0..df.height())
+    .map(|x| df.get_row(x).unwrap());
+
+    // print header with column names. cut off each name at 20 characters
+    let mut table = Table::new();
+    let column_names = columns_names(&df);
+    table.set_header(column_names);
+    for row in row_wise {
+        table.add_row(row.0.into_iter()
+            .map(|any| any_to_string(any))
+            .map(|mb| mb.unwrap_or_default())
+        );
+    }
+    println!("{table}");
+
     Ok(())
 }
-
+fn any_to_string(any: AnyValue) -> Option<String> {
+    match any {
+        AnyValue::Utf8(s) => Some(String::from(s)),
+        AnyValue::Float64(f) => {
+            let mut format = Formatter::new() 
+                .separator(',').unwrap()
+                .prefix("$").unwrap()
+                .precision(Precision::Decimals(2));
+            let fstr = format.fmt2(f);
+            Some(String::from(fstr))
+        },
+        AnyValue::Date(d) => Some(date32_to_date(d).format("yyyy-MM-dd").to_string()),
+        AnyValue::Null => None,
+        _ => None,
+    }
+}   
 pub fn configure_the_environment() {
     env::set_var("POLARS_FMT_TABLE_ROUNDED_CORNERS", "1"); // apply rounded corners to UTF8-styled tables.
                                                            //env::set_var("POLARS_FMT_MAX_COLS", "20"); // maximum number of columns shown when formatting DataFrames.
     env::set_var("POLARS_FMT_MAX_ROWS", "999999"); // maximum number of rows shown when formatting DataFrames.
     env::set_var("POLARS_FMT_STR_LEN", "50"); // maximum number of characters printed per string value.
+    // set thousands separator to ,
+    env::set_var("POLARS_FMT_THOUSANDS_SEP", ",");
+}
+
+fn columns_names(df: &DataFrame) -> Vec<String> {
+    df.get_column_names()
+        .iter()
+        .map(|x| x.to_string())
+        .collect()
+}
+fn show_subtotals(ldf2: &LazyFrame) -> Result<()> {
+    let g = ldf2.clone().group_by_stable([
+        ACCOUNT_TYPE]);
+
+    let subtotals = g.agg([
+        col(AMOUNT).sum()
+    ]);
+    println!("\n{}", subtotals.collect()?);
+    Ok(())
+}
+fn write_csv(df: &mut DataFrame, out_filename: &str) -> Result<()> {
+    let mut file = File::create(out_filename).expect("could not create file");
+    CsvWriter::new(&mut file)
+        .include_header(true)
+        //.with_separator(b'\t')
+        .with_float_precision(Some(2))
+        .finish(df)?;
+    println!("wrote {}", out_filename);
+    println!("\n{}", df);
+    Ok(())
 }

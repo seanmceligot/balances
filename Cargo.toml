@@ -7,7 +7,11 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.95"
+chrono = "0.4.31"
+comfy-table = "7.1.0"
+numfmt = "1.1.1"
 polars = { version = "0.35.4", features = ["csv", "lazy","cum_agg", "polars-io"] }
+polars-arrow = "0.35.4"
 
 [[bin]]
 name="balances"
