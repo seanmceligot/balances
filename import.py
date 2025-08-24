@@ -1,11 +1,8 @@
 from pathlib import Path
 import polarsutil as pu
 from typing import Optional
-from rich import print
-import pdb  ## noqa: F401
+import pdb  # noqa: F401 
 import argparse
-#from rich.console import Console
-#console = Console()
 
 def write_meta(csv_path: Path):
     out_meta_path = csv_path.with_suffix(".json")

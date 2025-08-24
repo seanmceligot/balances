@@ -1,3 +1,4 @@
+use anyhow::Context;
 use anyhow::Ok;
 use anyhow::Result;
 use numfmt::Formatter;
@@ -21,6 +22,15 @@ static AMOUNT: &str = "Amount";
 static DATE: &str = "Date";
 static TOTAL: &str = "Total";
 static ACCOUNT_TYPE: &str = "account_type";
+
+fn expand_tilde(path: &str) -> PathBuf {
+    if let Some(stripped) = path.strip_prefix("~/") {
+        if let Some(home) = env::var_os("HOME") {
+            return Path::new(&home).join(stripped);
+        }
+    }
+    PathBuf::from(path)
+}
 // balances.txt is a list of CSV filenames or paths.
 // each CSV with is expected to have the following header
 //
@@ -39,11 +49,38 @@ static ACCOUNT_TYPE: &str = "account_type";
 //
 // Total is cummulative from top to bottom
 //
-fn read_filenames_from_file(filenames_file: &str) -> Result<Vec<PathBuf>> {
-    let text = read_to_string(filenames_file)?;
-    let vec_of_pathbuf = text.lines().map(|line| PathBuf::from(line.trim())).collect();
-    Ok(vec_of_pathbuf)
+fn read_filenames_from_file(filenames_file: &PathBuf) -> Result<Vec<PathBuf>> {
+    println!("read filenames_file: {:?}", filenames_file);
+    let text = read_to_string(filenames_file.clone())
+        .with_context(|| format!("Failed to read '{:?}'", filenames_file.clone()))?;
+
+    let base_dir = filenames_file
+        .parent()
+        .unwrap_or_else(|| Path::new(""));
+
+    let mut files = Vec::new();
+    for filename in text.lines().map(|f| f.trim()) {
+        if filename.is_empty() {
+            continue;
+        }
+        let path = base_dir.join(filename);
+
+        // Just check if file can be opened, otherwise warn and skip
+        if let Err(e) = File::open(&path) {
+            eprintln!("Warning: could not open {}: {}", path.display(), e);
+            continue;
+        }
+
+        files.push(path);
+    }
+    Ok(files)
 }
+// Sample CVS
+// 
+// "Date","Amount","Account Name"
+// "2021-10-19","10,900.44","My Checking"
+// "2021-10-19","11,900.44","My Checking"
+// "2021-10-19","9,900.44","My Checking"
 
 fn newest_balance(filename: &PathBuf) -> Result<LazyFrame> {
     let fields = vec![
@@ -56,7 +93,7 @@ fn newest_balance(filename: &PathBuf) -> Result<LazyFrame> {
     let arrow_schema = ArrowSchema { fields, metadata };
     let polars_schema = Schema::from(Arc::new(arrow_schema));
     println!("read csv: {:?}", filename);
-    let df = LazyCsvReader::new(Path::new(filename))
+    let df = LazyCsvReader::new(filename)
         .has_header(true)
         .with_schema(Some(Arc::new(polars_schema)))
         .finish()?;
@@ -74,7 +111,7 @@ fn newest_balance(filename: &PathBuf) -> Result<LazyFrame> {
 
 // categories.csv
 // Account Name,account_type
-fn load_categories() -> Result<LazyFrame> {
+fn load_categories(categories_csv_path: &PathBuf) -> Result<LazyFrame> {
     let fields = vec![
         ArrowField::new(ACCOUNT_NAME, ArrowDataType::Utf8, false),
         ArrowField::new("account_type", ArrowDataType::Utf8, false),
@@ -82,18 +119,18 @@ fn load_categories() -> Result<LazyFrame> {
     let metadata: BTreeMap<String, String> = BTreeMap::new();
     let arrow_schema = ArrowSchema { fields, metadata };
     let polars_schema = Schema::from(Arc::new(arrow_schema));
-    let ldf = LazyCsvReader::new("categories.csv")
+    let ldf = LazyCsvReader::new(categories_csv_path)
         .has_header(true)
         .with_schema(Some(Arc::new(polars_schema)))
         .finish()?;
     Ok(ldf)
 }
-
 fn main() -> Result<()> {
     configure_the_environment();
-
+    let data_dir = expand_tilde("~/.local/share/fi/balances/");
+    let balances_file_list = data_dir.join("balances.txt");
     let mut dataframes = Vec::new();
-    let filenames = read_filenames_from_file("balances.txt")?;
+    let filenames = read_filenames_from_file(&balances_file_list)?;
 
     // commented out code does a comparision to check for errors, but the schema may be enough.
     //let mut last: Option<DataFrame> = None;
@@ -120,8 +157,8 @@ fn main() -> Result<()> {
     let col_total = col(TOTAL);
 
     let ldf = ldf.select([col_account_name, col_amount, col_date, col_total]);
-
-    let categories = load_categories()?;
+    let categories_csv_path = data_dir.join("categories.csv");
+    let categories = load_categories(&categories_csv_path)?;
     let c = categories.collect()?.lazy();
     // join categories to ldf on Account Name
     let ldf = ldf.left_join(c, col(ACCOUNT_NAME), col(ACCOUNT_NAME));
