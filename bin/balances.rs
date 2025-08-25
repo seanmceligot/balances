@@ -83,44 +83,34 @@ fn read_filenames_from_file(filenames_file: &PathBuf) -> Result<Vec<PathBuf>> {
 // "2021-10-19","9,900.44","My Checking"
 
 fn newest_balance(filename: &PathBuf) -> Result<LazyFrame> {
-    let fields = vec![
-        ArrowField::new(DATE, ArrowDataType::Date32, false),
-        ArrowField::new(AMOUNT, ArrowDataType::Float64, false),
-        ArrowField::new(ACCOUNT_NAME, ArrowDataType::Utf8, false),
-    ];
+    let filename = PlPath::Local(Arc::from(filename.clone()));
 
-    let metadata: BTreeMap<String, String> = BTreeMap::new();
-    let arrow_schema = ArrowSchema { fields, metadata };
-    let polars_schema = Schema::from(Arc::new(arrow_schema));
+    // Build a Polars schema using DataType (Polars 0.50 API)
+    let mut fields = PlIndexMap::new(); // <PlSmallStr, DataType>
+    fields.insert(PlSmallStr::from_str(DATE), DataType::Date);
+    fields.insert(PlSmallStr::from_str(AMOUNT), DataType::Float64);
+    fields.insert(PlSmallStr::from_str(ACCOUNT_NAME), DataType::String);
+    let polars_schema: Schema = Schema::from(fields);
     println!("read csv: {:?}", filename);
     let df = LazyCsvReader::new(filename)
-        .has_header(true)
+        .with_has_header(true)
         .with_schema(Some(Arc::new(polars_schema)))
         .finish()?;
-    let sorted: LazyFrame = df.sort(
-        DATE,
-        SortOptions {
-            descending: false,
-            nulls_last: false,
-            multithreaded: true,
-            maintain_order: true,
-        },
-    );
+    let sorted: LazyFrame = df.sort( [DATE], Default::default());
     Ok(sorted.last())
 }
 
 // categories.csv
 // Account Name,account_type
 fn load_categories(categories_csv_path: &PathBuf) -> Result<LazyFrame> {
-    let fields = vec![
-        ArrowField::new(ACCOUNT_NAME, ArrowDataType::Utf8, false),
-        ArrowField::new("account_type", ArrowDataType::Utf8, false),
-    ];
-    let metadata: BTreeMap<String, String> = BTreeMap::new();
-    let arrow_schema = ArrowSchema { fields, metadata };
-    let polars_schema = Schema::from(Arc::new(arrow_schema));
+    let categories_csv_path = PlPath::Local(Arc::from(categories_csv_path.clone()));
+    // Build schema as Schema<DataType> for CSV reader
+    let mut fields = PlIndexMap::new();
+    fields.insert(PlSmallStr::from_str(ACCOUNT_NAME), DataType::String);
+    fields.insert(PlSmallStr::from_str("account_type"), DataType::String);
+    let polars_schema: Schema = Schema::from(fields);
     let ldf = LazyCsvReader::new(categories_csv_path)
-        .has_header(true)
+        .with_has_header(true)
         .with_schema(Some(Arc::new(polars_schema)))
         .finish()?;
     Ok(ldf)
@@ -148,6 +138,7 @@ fn main() -> Result<()> {
         parallel: true,
         rechunk: true,
         to_supertypes: true,
+        diagonal: false, from_partitioned_ds: false, maintain_order: true
     };
     let combined_df = polars::prelude::concat(&dataframes, uargs)?;
     let ldf = combined_df.with_column(col(AMOUNT).cum_sum(false).alias(TOTAL));
@@ -168,7 +159,7 @@ fn main() -> Result<()> {
     let ldf3 = ldf.clone();
     let mut df = ldf.collect()?;
 
-    let columns: &[Series] = df.get_columns();
+    let columns: &[Column] = df.get_columns();
 
     assert_eq!(columns[0].name(), ACCOUNT_NAME);
     assert_eq!(columns[1].name(), AMOUNT);
@@ -200,7 +191,7 @@ fn main() -> Result<()> {
 }
 fn any_to_string(any: AnyValue) -> Option<String> {
     match any {
-        AnyValue::Utf8(s) => Some(String::from(s)),
+        AnyValue::String(s) => Some(String::from(s)),
         AnyValue::Float64(f) => {
             let mut format = Formatter::new() 
                 .separator(',').unwrap()
